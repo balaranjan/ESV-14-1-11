@@ -317,7 +317,7 @@ def plot_band_structure(calc_dir, emin=-5, emax=5, line_width=0.85):
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
         width=PLOT_WIDTH, 
-        height=PLOT_WIDTH,
+        height=PLOT_HEIGHT,
         margin=dict(l=50, r=30, t=40, b=40),
     )
 
@@ -494,37 +494,39 @@ def plot_cohp(calc_dir, emin=-6, emax=2, custom_colors=None, line_width=3, selec
     if not cohp_files:
         return None
 
-    pair_names = [
-        os.path.basename(f).replace("COHP_", "").replace(".csv", "")
-        for f in cohp_files
-    ]
+    # Build normalized pair names (dash-separated, Mendeleev-sorted) for consistent comparison
+    pair_names_normalized = []
+    pair_name_map = {}  # raw filename -> normalized label
+    for f in cohp_files:
+        raw = os.path.basename(f).replace("COHP_", "").replace(".csv", "")
+        elems = extract_elements(raw.replace("_", "-").replace("-", "/"))
+        sorted_pair = sort_by_mendeleev(elems)
+        norm = "-".join(sorted_pair)
+        pair_names_normalized.append(norm)
+        pair_name_map[raw] = norm
 
-    # Use externally provided selection, or default to all pairs
-    selected = selected_pairs if selected_pairs else pair_names
+    # Use externally provided selection, or default to all normalized names
+    selected = selected_pairs if selected_pairs else pair_names_normalized
 
     fig = go.Figure()
 
     all_x_values = []
 
     for i, fpath in enumerate(cohp_files):
-        pname = os.path.basename(fpath).replace("COHP_", "").replace(".csv", "")
-        if not selected or pname not in selected:
+        raw_pname = os.path.basename(fpath).replace("COHP_", "").replace(".csv", "")
+        pair_label = pair_name_map[raw_pname]
+        if not selected or pair_label not in selected:
             continue
 
         df = pd.read_csv(fpath)
         df.columns = df.columns.str.strip()
-
-        # Sort pair label by Mendeleev number of elements
-        elements = extract_elements(pname.replace("-", "/"))
-        sorted_pair = sort_by_mendeleev(elements)
-        pair_label = "-".join(sorted_pair)
 
         # Determine color: use custom override, otherwise palette by position
         if custom_colors and pair_label in custom_colors:
             cohp_color = custom_colors[pair_label]
         else:
             # Find this pair's index in the full pairs list for consistent palette assignment
-            pair_idx = pair_names.index(pair_label) if pair_label in pair_names else i
+            pair_idx = pair_names_normalized.index(pair_label) if pair_label in pair_names_normalized else i
             cohp_color = PAIR_COLOR_PALETTE[pair_idx % len(PAIR_COLOR_PALETTE)]
 
         mask = (df["Energy (eV)"] >= emin) & (df["Energy (eV)"] <= emax)
@@ -663,8 +665,9 @@ for a_val in unique_A:
             c_vals.add(v["C"])
     a_shared_map[a_val] = len(c_vals)
 
-sel_A = st.select_slider("Select A", options=unique_A, value=unique_A[0], key="a_slider")
-render_tick_ruler(unique_A, "A", shared_map=a_shared_map)
+sel_A = st.select_slider("Select A", options=unique_A, value=unique_A[0], key="a_slider",
+                         format_func=lambda x: str(x))
+# render_tick_ruler(unique_A, "A", shared_map=a_shared_map)
 
 # -- C slider filtered by selected A --
 matching = {k: v for k, v in CALCS.items() if abs(v["A"] - sel_A) < 1e-6}
