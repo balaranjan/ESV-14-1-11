@@ -21,6 +21,7 @@ import streamlit as st
 
 # ---- local modules ----
 from element_data import element_data
+from cascade_selector import cascade_selector
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 
@@ -172,7 +173,7 @@ def scan_calculations():
         if not os.path.isdir(calc_dir) or not os.path.isfile(init_path):
             continue
         A, C = load_init(init_path)
-        calcs[entry] = {"A": A, "C": C, "dir": calc_dir}
+        calcs[entry] = {"sample": entry, "A": A, "C": C, "dir": calc_dir}
     return calcs
 
 
@@ -615,85 +616,27 @@ if not CALCS:
 
 st.info(f"Loaded {len(CALCS)} calculations")
 
-def render_tick_ruler(values, label, shared_map=None):
-    """Render a wide HTML ruler with '|' tick marks and value labels.
+# ---- build DataFrame for cascading selectors ----
+calc_df = pd.DataFrame([{"sample": v["sample"], "A": v["A"], "C": v["C"]} for v in CALCS.values()])
 
-    - All values are always visible (full-width container).
-    - If *shared_map[v]* > 1 (i.e. this value maps to multiple counterparts),
-      the '|' is colored; otherwise it stays grey.
-    - Labels are shown for every available value (not spaced at fixed intervals)
-      so nothing is hidden.
-    """
-    if len(values) < 2:
-        return
-    vmin = min(values)
-    vmax = max(values)
-    vrange = vmax - vmin or 1
-
-    # Build tick marks: '|' for every available value
-    tick_marks = []
-    for v in values:
-        pct = (v - vmin) / vrange * 100
-        is_shared = False
-        if shared_map is not None:
-            is_shared = shared_map.get(v, 1) > 1
-        color = "#E74C3C" if is_shared else "#999"
-        # Show the value label directly under each tick (all values always visible)
-        tick_marks.append(
-            f'<span style="position:absolute;left:{pct}%;transform:translateX(-50%);'
-            f'font-size:14px;color:{color};margin-top:2px">|</span>'
-            f'<span style="position:absolute;left:{pct}%;transform:translateX(-50%);'
-            f'font-size:9px;color:#666;margin-top:16px">{v:.3f}</span>'
-        )
-
-    all_spans = " ".join(tick_marks)
-    st.markdown(
-        f'<div style="position:relative;height:38px;border-bottom:1px solid #ddd;'
-        f'margin-top:-8px;margin-bottom:4px;min-width:100%;overflow-x:auto;">{all_spans}</div>',
-        unsafe_allow_html=True,
-    )
-
-# -- A slider with tick marks --
-unique_A = sorted(set(v["A"] for v in CALCS.values()))
-
-# Build shared_map: how many distinct C values each A maps to (across ALL calcs)
-a_shared_map = {}
-for a_val in unique_A:
-    c_vals = set()
-    for v in CALCS.values():
-        if abs(v["A"] - a_val) < 1e-6:
-            c_vals.add(v["C"])
-    a_shared_map[a_val] = len(c_vals)
-
-sel_A = st.select_slider("Select A", options=unique_A, value=unique_A[0], key="a_slider",
-                         format_func=lambda x: str(x))
-# render_tick_ruler(unique_A, "A", shared_map=a_shared_map)
-
-# -- C slider filtered by selected A --
-matching = {k: v for k, v in CALCS.items() if abs(v["A"] - sel_A) < 1e-6}
-if not matching:
-    st.warning(f"No calculations match A={sel_A:.4f}")
+# ---- cascading selector replaces old A/C select_sliders ----
+selected_sample = cascade_selector(calc_df, filter_cols=["A", "C"], sample_col="sample")
+if selected_sample is None:
+    st.warning("No matching sample found.")
     st.stop()
 
-unique_C = sorted(set(v["C"] for v in matching.values()))
+calc = CALCS[selected_sample]
 
-# Build shared_map: how many distinct A values each C maps to (across ALL calcs)
-c_shared_map = {}
-for c_val in unique_C:
-    a_vals = set()
-    for v in CALCS.values():
-        if abs(v["C"] - c_val) < 1e-6:
-            a_vals.add(v["A"])
-    c_shared_map[c_val] = len(a_vals)
-
-sel_C = st.select_slider("Select C", options=unique_C, value=unique_C[0], key="c_slider")
-render_tick_ruler(unique_C, "C", shared_map=c_shared_map)
-
-# -- pick the matched calculation (first match) --
-calc = next((v for v in matching.values() if abs(v["C"] - sel_C) < 1e-6), None)
-if calc is None:
-    st.warning("No match found.")
-    st.stop()
+# ---- OLD SELECTOR CODE REMOVED ----
+# def render_tick_ruler(values, label, shared_map=None): ...
+# unique_A = sorted(set(v["A"] for v in CALCS.values()))
+# a_shared_map = { ... }
+# sel_A = st.select_slider(...)
+# matching = {k: v for k, v in CALCS.items() if abs(v["A"] - sel_A) < 1e-6}
+# unique_C = sorted(set(v["C"] for v in matching.values()))
+# c_shared_map = { ... }
+# sel_C = st.select_slider(...)
+# calc = next((v for v in matching.values() if abs(v["C"] - sel_C) < 1e-6), None)
 
 st.markdown(f"**{os.path.basename(calc['dir'])}** | A={calc['A']:.4f}, C={calc['C']:.4f}")
 
