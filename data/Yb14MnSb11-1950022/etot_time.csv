@@ -1,0 +1,7 @@
+Type,Iteration,converged,ETOT (eV),Eime (s)
+first optimization,1,False,-13034.796415725541,12934.5
+first optimization,2,False,-13034.816052793325,10471.7
+first optimization,3,False,-13034.70617802974,10481.8
+first optimization,4,False,-13034.86192620908,10531.9
+first optimization,5,True,-13034.862987076567,5617.9
+first optimization,1,True,-13034.862990919091,15958.8
